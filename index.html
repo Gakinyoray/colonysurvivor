@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shattered Colony — The Survivors (HTML5 recreation)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+
+    <!-- Main menu overlay -->
+    <div id="menu" class="overlay">
+      <div class="menu-panel">
+        <h1>SHATTERED COLONY</h1>
+        <p class="subtitle">THE SURVIVORS · HTML5 recreation</p>
+
+        <div class="menu-section">
+          <label>Difficulty</label>
+          <div id="difficulty" class="seg">
+            <button data-diff="0">Tutorial</button>
+            <button data-diff="1" class="sel">Novice</button>
+            <button data-diff="2">Veteran</button>
+            <button data-diff="3">Expert</button>
+            <button data-diff="4">Quartermaster</button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <label><input type="checkbox" id="sandbox" /> Endless sandbox (no win condition)</label>
+        </div>
+
+        <div class="menu-actions">
+          <button id="btn-start" class="primary">New Game</button>
+          <button id="btn-continue">Continue</button>
+          <button id="btn-share">Share Seed</button>
+        </div>
+
+        <div id="share-result" class="share"></div>
+
+        <details class="briefing">
+          <summary>How to play</summary>
+          <p>You command the last survivors after the outbreak. Your <b>Headquarters</b>
+          is your first depot. Survivors drive trucks of <b>boards</b>, <b>ammo</b> and
+          <b>food</b> between linked structures.</p>
+          <ul>
+            <li><b>Workshop</b> — place on a building to scavenge resources.</li>
+            <li><b>Depot</b> — extends your supply range. Wall it in with barricades!</li>
+            <li><b>Sniper</b> — shoots zombies in range (needs ammo + survivors).</li>
+            <li><b>Barricade</b> — blocks zombies; soaks hits using boards.</li>
+          </ul>
+          <p>Zombies pour in from the bridges in escalating <b>hordes</b>. An undefended
+          depot falls to a single zombie — its survivors flee to the nearest depot.
+          Survive every wave and clear the city to win.</p>
+        </details>
+
+        <div id="leaderboard" class="leaderboard"></div>
+      </div>
+    </div>
+
+    <div id="pause-hint" class="hidden"></div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
