@@ -1,21 +1,24 @@
 * { box-sizing: border-box; }
 html, body {
-  margin: 0; padding: 0; height: 100%;
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  /* lock the page so mobile browsers can't scroll / bounce the canvas around */
+  position: fixed; overflow: hidden; overscroll-behavior: none;
   background: #06070a; color: #e8ecf2;
   font-family: 'Courier New', monospace;
-  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
 }
-#app { position: relative; width: 100vw; height: 100vh; }
+#app { position: fixed; inset: 0; }
 #game {
-  display: block; width: 100%; height: 100%; background: #000; cursor: crosshair;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; background: #000; cursor: crosshair;
   touch-action: none;            /* let the game own all touch gestures */
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
 }
-html, body { overscroll-behavior: none; }
 
 .overlay {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px;
   background: radial-gradient(circle at 50% 30%, #15202e 0%, #06070a 80%);
   z-index: 10;
 }
