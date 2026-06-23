@@ -71,18 +71,32 @@ between linked structures along supply lines.
 | **Depot**    | 🪵24 · 👤2      | Extends your supply range (radius 7). Wall it in with barricades! |
 | **Sniper**   | 🪵12 · 👤1      | Shoots zombies in range. Needs ammo + survivors to fire. |
 | **Barricade**| 🪵8            | Blocks zombies; soaks each bash by spending a board. |
+| **Demolish** | 🪵10 · 👤1     | Set charges on a bridge (from a depot in range) to drop it. |
 
-Zombies pour in from the **bridges** in escalating hordes (the flow field guides
-them toward your depots; gunfire and construction noise lure them). An
-undefended depot falls quickly and its survivors flee to the nearest depot — so
-**barricades are your real defense**. Survive every wave and clear the city to
-win; lose every depot and the colony falls.
+Zombies pour in from the **bridges** placed on all four sides of the map (a
+fixed set — they never increase). The flow field guides the horde toward your
+depots; gunfire and construction noise lure them. An undefended depot falls
+quickly and its survivors flee to the nearest depot — so **barricades are your
+real defense**.
+
+### Win condition
+
+> **Demolish every bridge** and **clear the city of all zombies — including the
+> ones hiding inside buildings.**
+
+Bridges sit at the map edges, so you must expand outward (depots → workshops →
+barricades) until a depot is within supply range of each bridge, then **Demolish**
+it. Buildings harbour lurking zombies; scavenging a building disturbs them, and
+once the last bridge is down the colony presses a final sweep to flush the rest
+out. Clear them all to win. Lose every depot and the colony falls. (Endless
+**sandbox** mode has no win condition.)
 
 ### Controls
 
 | Input | Action |
 |-------|--------|
 | `D` / `S` / `B` / `W` | Select Depot / Sniper / Barricade / Workshop to build |
+| `X` | Demolish mode — tap a bridge to set charges |
 | Left click | Build / select a structure |
 | Right click / `Esc` | Cancel build mode or selection |
 | Hold `Shift` while placing | Place multiple of the same structure |

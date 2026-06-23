@@ -177,6 +177,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 's') hud.setBuild(1);  // Sniper
   else if (k === 'b') hud.setBuild(0);  // Barricade
   else if (k === 'w') hud.setBuild(3);  // Workshop
+  else if (k === 'x') hud.setBuild(5);  // Demolish (bridge charges)
   else if (k === 'escape') { hud.buildType = null; hud.selected = null; hud.linkMode = false; }
   else if (k === 'r' && game.state !== GameState.PLAY) newGame({ difficulty: game.difficulty, sandbox: game.sandbox });
   else if (k === 'm' && game.state !== GameState.PLAY) backToMenu();

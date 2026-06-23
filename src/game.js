@@ -1,5 +1,5 @@
 // Core game engine: world state, simulation step, waves, build rules, win/lose.
-import { Option, Resource, TowerType, Difficulty } from './config.js';
+import { Option, Resource, TowerType, Difficulty, DEMOLISH, CHARGE_BOARDS, CHARGE_SURVIVORS, CHARGE_FUSE } from './config.js';
 import { Point, DIRS, rand, seed, choice } from './util.js';
 import { GameMap, generateCity, findStart, Background } from './map.js';
 import {
@@ -113,9 +113,18 @@ export class Game {
       const salvageable = (c.salvage > 0) || c.rubble || c.building != null;
       return salvageable && supplied != null;
     }
+    if (type === DEMOLISH) {
+      const b = this.bridgeAt(x, y);
+      return b != null && b.charging === 0 && !c.hasZombies() && supplied != null;
+    }
     // depot/sniper/barricade need a clear road-like cell
     const roadLike = c.background === Background.ROAD;
     return roadLike && !c.rubble && supplied != null;
+  }
+  // resource cost of a build/demolish action
+  costFor(type) {
+    if (type === DEMOLISH) return { boards: CHARGE_BOARDS, survivors: CHARGE_SURVIVORS };
+    return { boards: buildBoardCost(type), survivors: buildSurvivorCost(type) };
   }
   // nearest supplying depot within supplyRange (Manhattan); returns Depot or null
   suppliedBy(x, y) {
@@ -129,7 +138,7 @@ export class Game {
   // a depot within range that can actually pay for `type` (prefers nearest)
   supplierFor(type, x, y) {
     let best = null, bestD = 1e9;
-    const board = buildBoardCost(type), surv = buildSurvivorCost(type);
+    const { boards: board, survivors: surv } = this.costFor(type);
     for (const t of this.depots()) {
       const d = Point.dist(new Point(x, y), t.pos);
       if (d > Option.supplyRange) continue;
@@ -142,9 +151,18 @@ export class Game {
   affordable(type, x, y) {
     return this.supplierFor(type, x, y) != null;
   }
-  // Player build action: returns true on success.
+  // intact, undestroyed bridge whose cells include (x,y)
+  bridgeAt(x, y) {
+    for (const b of this.map.bridges) {
+      if (b.destroyed) continue;
+      if (b.cells.some((p) => p.x === x && p.y === y)) return b;
+    }
+    return null;
+  }
+  // Player build action (also handles bridge demolition). Returns true on success.
   build(type, x, y) {
     if (this.state !== GameState.PLAY) return false;
+    if (type === DEMOLISH) return this.setCharges(x, y);
     if (!this.canPlace(type, x, y)) return false;
     const supplier = this.supplierFor(type, x, y);
     if (!supplier) {
@@ -191,6 +209,40 @@ export class Game {
     this.closeTower(t);
     return true;
   }
+
+  // Set demolition charges on a bridge: pay from a supplying depot, then a fuse
+  // burns down before the bridge collapses into the moat (no more spawns there).
+  setCharges(x, y) {
+    if (!this.canPlace(DEMOLISH, x, y)) return false;
+    const supplier = this.supplierFor(DEMOLISH, x, y);
+    if (!supplier) {
+      this.emit('message', this.suppliedBy(x, y) ? 'Need 10 boards + 1 survivor nearby.' : 'Bridge out of supply range.');
+      return false;
+    }
+    supplier.take(Resource.BOARDS, CHARGE_BOARDS);
+    supplier.take(Resource.SURVIVORS, CHARGE_SURVIVORS);
+    const bridge = this.bridgeAt(x, y);
+    bridge.charging = CHARGE_FUSE;
+    this.emit('charges', bridge);
+    return true;
+  }
+  collapseBridge(bridge) {
+    bridge.destroyed = true;
+    bridge.charging = 0;
+    for (const p of bridge.cells) {
+      const c = this.map.get(p.x, p.y);
+      if (!c) continue;
+      c.background = Background.WATER;
+      c.blocked = true;
+      // any zombie or truck standing on the span goes down with it
+      for (const z of c.zombies.slice()) z.kill(p);
+      for (const tr of c.trucks.slice()) tr.cleanup();
+    }
+    this.effects.push({ type: 'explosion', x: bridge.spawn.x, y: bridge.spawn.y, t: 18 });
+    this.recomputeFlow();
+    this.emit('bridge-destroyed', bridge);
+  }
+  intactBridges() { return this.map.bridges.filter((b) => !b.destroyed); }
 
   // --- supply trucks -------------------------------------------------------
   spawnTruck(source, dest, res, amount) {
@@ -287,39 +339,61 @@ export class Game {
     return z;
   }
   startHorde() {
+    const intact = this.intactBridges();
+    if (intact.length === 0) return; // no bridges left -> no new hordes
     this.hordeCount++;
-    const bridges = this.map.bridges.length;
     const size = Option.wanderingZombieBase +
-      Option.wanderingZombieIncrement * this.hordeCount * (bridges + 1);
+      Option.wanderingZombieIncrement * this.hordeCount * (intact.length + 1);
     const mult = Option.zombieMultiplier[Math.min(this.difficulty, Option.zombieMultiplier.length - 1)];
     const count = Math.floor(size * mult);
     for (let i = 0; i < count; i++) {
-      const bridge = choice(this.map.bridges);
+      const bridge = choice(intact);
+      const s = bridge.spawn;
       // spread spawns around the bridge mouth
-      const sx = bridge.x + rand(3) - 1;
-      const sy = bridge.y + rand(2);
+      const sx = s.x + rand(3) - 1, sy = s.y + rand(3) - 1;
       const c = this.map.get(sx, sy);
-      if (c && c.isPassable()) this.spawnZombieAt(sx, sy, Zombie.WAVE_SPAWN);
-      else this.spawnZombieAt(bridge.x, bridge.y, Zombie.WAVE_SPAWN);
+      if (c && c.isPassable() && !c.hasTower()) this.spawnZombieAt(sx, sy, Zombie.WAVE_SPAWN);
+      else this.spawnZombieAt(s.x, s.y, Zombie.WAVE_SPAWN);
     }
     this.emit('horde', { wave: this.hordeCount, count });
   }
-  // occasional lone wanderer emerging from an un-scavenged building near a depot
-  trickleWanderer() {
-    const buildings = this.map.buildings.filter((b) => !b.cleared && b.cells.some((c) => c.salvage > 0));
-    if (!buildings.length) return;
-    const b = choice(buildings);
+  // Flush one zombie hiding inside a building out into the streets. These must
+  // all be cleared (map.totalHidden -> 0) to win. Buildings closer to a depot
+  // wake first; scavenging a building also disturbs its lurkers (see Workshop).
+  emergeHidden(near) {
+    const haunted = this.map.buildings.filter((b) => b.hiddenZombies > 0);
+    if (!haunted.length) return false;
+    let b = choice(haunted);
+    if (near) {
+      // prefer a haunted building near a point (used for the final sweep)
+      b = haunted.reduce((a, c) =>
+        Point.dist(new Point(c.x, c.y), near) < Point.dist(new Point(a.x, a.y), near) ? c : a, b);
+    }
     const cell = choice(b.cells);
+    b.hiddenZombies--;
+    this.map.totalHidden = Math.max(0, this.map.totalHidden - 1);
     this.spawnZombieAt(cell.x, cell.y, Zombie.BUILDING_SPAWN);
+    return true;
   }
 
   // --- callbacks used for effects / audio ---------------------------------
-  onScavenge(ws) { this.emit('scavenge', ws); }
   onSniperShot(sniper, zombie) {
     this.effects.push({ type: 'shot', x1: sniper.pos.x, y1: sniper.pos.y, x2: zombie.cell.x, y2: zombie.cell.y, t: 4 });
     this.emit('shot', sniper);
   }
   onBarricadeBash(t) { this.emit('bash', t); }
+  // scavenging a building can disturb the zombies hiding inside it
+  onScavenge(ws) {
+    const cell = this.map.get(ws.pos.x, ws.pos.y);
+    const b = cell && cell.building;
+    if (b && b.hiddenZombies > 0 && rand(5) === 0) {
+      b.hiddenZombies--;
+      this.map.totalHidden = Math.max(0, this.map.totalHidden - 1);
+      const spot = choice(b.cells);
+      this.spawnZombieAt(spot.x, spot.y, Zombie.BUILDING_SPAWN);
+    }
+    this.emit('scavenge', ws);
+  }
   onZombieKilled(z, from) {
     this.totals.zombies--;
     this.totals.totalKilled++;
@@ -340,22 +414,33 @@ export class Game {
     // flow field refresh
     if (this.flowTimer-- <= 0) { this.recomputeFlow(); this.flowTimer = 20; }
 
-    // waves
-    if (!this.sandbox && this.hordeCount >= this.maxWaves) {
-      // final stretch: win once the map is clear of zombies
-      if (this.zombies.filter((z) => !z.dead).length === 0 && this.frame > 60) {
-        this.cleared = true; this.win();
-      }
-    } else {
+    // burning demolition fuses
+    for (const b of this.map.bridges) {
+      if (b.charging > 0 && --b.charging <= 0) this.collapseBridge(b);
+    }
+
+    const intact = this.intactBridges();
+    // hordes keep coming from intact bridges
+    if (intact.length > 0) {
       this.waveTimer--;
       if (this.waveTimer <= 0) {
         this.startHorde();
-        // hordes come faster as the colony grows
         this.waveTimer = Math.max(Option.fps * 18, Option.fps * 45 - this.hordeCount * Option.fps * 3);
       }
     }
-    // occasional building wanderers
-    if (this.frame % (Option.fps * 8) === 0 && rand(3) === 0) this.trickleWanderer();
+    // zombies lurking in buildings emerge over time; once the bridges are down
+    // the colony presses a final sweep, flushing them out faster.
+    const allBridgesDown = intact.length === 0;
+    const emergeEvery = allBridgesDown ? Option.fps * 2 : Option.fps * 8;
+    if (this.map.totalHidden > 0 && this.frame % emergeEvery === 0) {
+      this.emergeHidden(allBridgesDown ? this.depots()[0]?.pos : null);
+    }
+
+    // WIN: every bridge destroyed and the city cleared of zombies (hidden too)
+    if (!this.sandbox && allBridgesDown && this.map.totalHidden === 0 &&
+        this.zombies.filter((z) => !z.dead).length === 0 && this.frame > 60) {
+      this.cleared = true; this.win();
+    }
 
     // step towers
     for (const t of this.towers) if (!t.dead) t.step();

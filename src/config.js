@@ -117,3 +117,11 @@ export const TowerType = {
   WORKSHOP: 3,
   HQ: 4, // recreation: HQ is a special depot
 };
+
+// Build-menu actions that aren't towers.
+export const DEMOLISH = 5;          // set charges on a bridge to drop it
+
+// Bridge demolition: cost paid from a supplying depot, plus a fuse delay.
+export const CHARGE_BOARDS = 10;
+export const CHARGE_SURVIVORS = 1;
+export const CHARGE_FUSE = Option.fps * 6;  // frames until the bridge collapses
