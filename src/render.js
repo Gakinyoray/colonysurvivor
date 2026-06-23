@@ -20,7 +20,17 @@ export class Renderer {
     this.ctx = canvas.getContext('2d');
     this.cam = { x: 0, y: 0 };
   }
-  resize(w, h) { this.canvas.width = w; this.canvas.height = h; }
+  // Size the drawing buffer to the canvas's actual displayed CSS size so the
+  // buffer and the on-screen element match 1:1 (otherwise touch/click hit-
+  // testing drifts, badly near the bottom on mobile). Call with no args.
+  resize(w, h) {
+    if (w == null && this.canvas.getBoundingClientRect) {
+      const r = this.canvas.getBoundingClientRect();
+      w = Math.round(r.width); h = Math.round(r.height);
+    }
+    this.canvas.width = Math.max(1, w || 1);
+    this.canvas.height = Math.max(1, h || 1);
+  }
 
   clampCamera(map) {
     const maxX = map.width * CP - this.canvas.width;

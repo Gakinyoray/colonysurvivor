@@ -24,10 +24,24 @@ let last = performance.now();
 const keys = new Set();
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight);
+  renderer.resize();              // match the canvas's real displayed size
+  if (game) renderer.clampCamera(game.map);
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 resize();
+
+// Map a client (CSS px) point to canvas buffer coordinates. With the buffer
+// sized to the displayed element these scale factors are ~1, but computing
+// them explicitly keeps hit-testing correct under any DPR / layout.
+function ptr(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    sx: (clientX - r.left) * (canvas.width / Math.max(1, r.width)),
+    sy: (clientY - r.top) * (canvas.height / Math.max(1, r.height)),
+  };
+}
 
 // --- menu wiring -----------------------------------------------------------
 document.querySelectorAll('#difficulty button').forEach((b) => {
@@ -142,15 +156,15 @@ function backToMenu() {
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousemove', (e) => {
   if (!hud) return;
-  const r = canvas.getBoundingClientRect();
-  hud.onMove(e.clientX - r.left, e.clientY - r.top);
+  const p = ptr(e.clientX, e.clientY);
+  hud.onMove(p.sx, p.sy);
 });
 canvas.addEventListener('mousedown', (e) => {
   if (!hud) return;
   audio.ensure();
-  const r = canvas.getBoundingClientRect();
+  const p = ptr(e.clientX, e.clientY);
   hud.shiftHeld = e.shiftKey;
-  hud.onClick(e.clientX - r.left, e.clientY - r.top, e.button);
+  hud.onClick(p.sx, p.sy, e.button);
 });
 
 window.addEventListener('keydown', (e) => {
@@ -178,10 +192,10 @@ canvas.addEventListener('touchstart', (e) => {
   audio.ensure();
   if (e.touches.length !== 1) return;
   const t = e.touches[0];
-  const r = canvas.getBoundingClientRect();
+  const p = ptr(t.clientX, t.clientY);
   touch = {
     startX: t.clientX, startY: t.clientY, lastX: t.clientX, lastY: t.clientY,
-    sx: t.clientX - r.left, sy: t.clientY - r.top, moved: false,
+    sx: p.sx, sy: p.sy, moved: false,
   };
   hud.onMove(touch.sx, touch.sy);
 }, { passive: false });
@@ -190,9 +204,10 @@ canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
   const t = e.touches[0];
   const r = canvas.getBoundingClientRect();
-  const dx = t.clientX - touch.lastX, dy = t.clientY - touch.lastY;
+  const scaleX = canvas.width / Math.max(1, r.width), scaleY = canvas.height / Math.max(1, r.height);
+  const dx = (t.clientX - touch.lastX) * scaleX, dy = (t.clientY - touch.lastY) * scaleY;
   touch.lastX = t.clientX; touch.lastY = t.clientY;
-  touch.sx = t.clientX - r.left; touch.sy = t.clientY - r.top;
+  touch.sx = (t.clientX - r.left) * scaleX; touch.sy = (t.clientY - r.top) * scaleY;
   if (Math.abs(t.clientX - touch.startX) > 8 || Math.abs(t.clientY - touch.startY) > 8) touch.moved = true;
   if (touch.moved && game) {
     renderer.cam.x -= dx; renderer.cam.y -= dy;
@@ -211,6 +226,8 @@ canvas.addEventListener('touchend', (e) => {
   }
   touch = null;
 }, { passive: false });
+// belt-and-braces: stop the page itself from scrolling on touch devices
+document.addEventListener('touchmove', (e) => { if (game) e.preventDefault(); }, { passive: false });
 
 function handleScroll() {
   const sp = 14;
@@ -269,6 +286,15 @@ function drawPaused() {
   ctx.fillText('PAUSED — press Space', canvas.width / 2, canvas.height / 2);
 }
 requestAnimationFrame(frame);
+
+// debug/inspection hook (handy for testing and the browser console)
+window.SC = {
+  get game() { return game; },
+  get hud() { return hud; },
+  get renderer() { return renderer; },
+  get paused() { return paused; },
+  get fast() { return fast; },
+};
 
 // support ?map=CODE deep links from the mock share feature
 (async function maybeLoadShared() {
