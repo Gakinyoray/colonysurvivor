@@ -1,0 +1,67 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: #06070a; color: #e8ecf2;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+#app { position: relative; width: 100vw; height: 100vh; }
+#game {
+  display: block; width: 100%; height: 100%; background: #000; cursor: crosshair;
+  touch-action: none;            /* let the game own all touch gestures */
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+html, body { overscroll-behavior: none; }
+
+.overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 30%, #15202e 0%, #06070a 80%);
+  z-index: 10;
+}
+.overlay.hidden { display: none; }
+
+.menu-panel {
+  width: 460px; max-width: 92vw;
+  background: rgba(12,16,22,0.92);
+  border: 1px solid #2a3340;
+  border-radius: 6px;
+  padding: 28px 30px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+h1 {
+  margin: 0; font-size: 30px; letter-spacing: 4px;
+  color: #c8d4e2; text-shadow: 0 2px 0 #000;
+}
+.subtitle { margin: 4px 0 22px; color: #6f8aa6; letter-spacing: 2px; font-size: 12px; }
+.menu-section { margin: 16px 0; }
+.menu-section > label { display: block; margin-bottom: 8px; color: #9fb0c4; font-size: 12px; letter-spacing: 1px; }
+
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  flex: 1 0 auto; padding: 8px 10px; font-family: inherit; font-size: 12px;
+  background: #1a2230; color: #cdd8e4; border: 1px solid #2f3a4a; border-radius: 4px; cursor: pointer;
+}
+.seg button.sel { background: #2f5a96; border-color: #5a91d6; color: #fff; }
+.seg button:hover { background: #243246; }
+
+.menu-actions { display: flex; gap: 8px; margin-top: 22px; }
+.menu-actions button {
+  flex: 1; padding: 12px; font-family: inherit; font-size: 13px; cursor: pointer;
+  background: #1d2735; color: #dfe6ee; border: 1px solid #34425a; border-radius: 4px;
+}
+.menu-actions button.primary { background: #2f6fd0; border-color: #4f8fe0; color: #fff; font-weight: bold; }
+.menu-actions button:hover { filter: brightness(1.15); }
+.menu-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.share { margin-top: 12px; min-height: 18px; color: #7fffa0; font-size: 12px; word-break: break-all; }
+
+.briefing { margin-top: 20px; color: #9fb0c4; font-size: 12px; line-height: 1.5; }
+.briefing summary { cursor: pointer; color: #cdd8e4; }
+.briefing ul { margin: 8px 0; padding-left: 18px; }
+.briefing b { color: #dfe6ee; }
+
+.leaderboard { margin-top: 14px; font-size: 11px; color: #8fa0b4; }
+.leaderboard .row { display: flex; justify-content: space-between; padding: 2px 0; }
+
+input[type="checkbox"] { vertical-align: middle; }
