@@ -4,6 +4,7 @@
 import { Game, GameState } from '../src/game.js';
 import { TowerType, Resource, Difficulty } from '../src/config.js';
 import { Background } from '../src/map.js';
+import { Point } from '../src/util.js';
 
 let failures = 0;
 function assert(cond, msg) {
@@ -31,7 +32,8 @@ for (const diff of [Difficulty.TUTORIAL, Difficulty.NOVICE, Difficulty.VETERAN, 
 
   assert(game.hq && game.hq.type === TowerType.HQ, 'HQ created');
   assert(game.map.buildings.length > 0, `city has ${game.map.buildings.length} buildings`);
-  assert(game.map.bridges.length > 0, `map has ${game.map.bridges.length} bridge(s)`);
+  assert(game.map.bridges.length >= 4, `bridges on all sides: ${game.map.bridges.length}`);
+  assert(game.map.totalHidden >= 0, `hidden zombies seeded in buildings: ${game.map.totalHidden}`);
   assert(game.zombieFlow != null, 'zombie flow field computed');
 
   // fill the HQ to capacity so every structure type can be validated
@@ -82,6 +84,34 @@ console.log('\n=== Win/Lose ===');
   game.fleeTower(game.hq);
   game.hq.destroy();
   assert(game.state === GameState.LOSE, 'destroying the only depot loses the game');
+}
+
+// win condition: drop every bridge AND clear the city (including building lurkers)
+console.log('\n=== Bridges & Win ===');
+{
+  const game = new Game({ difficulty: Difficulty.NOVICE, sandbox: false, seed: 11 });
+  assert(game.intactBridges().length === game.map.bridges.length, 'all bridges start intact');
+
+  // demolishing needs a supplying depot in range — far bridges can't be charged yet
+  const far = game.map.bridges.find((b) => Point.dist(b.spawn, game.hq.pos) > 7);
+  if (far) assert(game.build(5 /* DEMOLISH */, far.spawn.x, far.spawn.y) === false,
+    'cannot demolish a bridge with no depot in range');
+
+  // fuse mechanic: a charged bridge collapses into the moat
+  const b0 = game.map.bridges[0];
+  b0.charging = 3;
+  for (let i = 0; i < 6; i++) game.step();
+  assert(b0.destroyed, 'a charged bridge collapses after its fuse');
+
+  // drop the rest directly, flush every lurker, kill everything, then win
+  for (const b of game.map.bridges) if (!b.destroyed) game.collapseBridge(b);
+  let guard = 0;
+  while (game.map.totalHidden > 0 && guard++ < 20000) game.emergeHidden();
+  for (const z of game.zombies) if (!z.dead) z.kill(game.hq.pos);
+  for (let i = 0; i < 70; i++) game.step();
+  assert(game.intactBridges().length === 0, 'every bridge destroyed');
+  assert(game.map.totalHidden === 0, 'no zombies left hiding in buildings');
+  assert(game.state === GameState.WIN, 'bridges down + city cleared => VICTORY');
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURE(S)`);

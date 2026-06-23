@@ -1,8 +1,7 @@
 // Heads-up display + pointer interaction. Draws the resource bar, build menu,
 // minimap, selection panel, messages and the win/lose overlay, and translates
 // clicks into game actions (build, select, supply links, abandon).
-import { Option, Resource, TowerType, Difficulty } from './config.js';
-import { buildBoardCost, buildSurvivorCost } from './towers.js';
+import { Option, Resource, TowerType, Difficulty, DEMOLISH } from './config.js';
 
 const CP = Option.cellPixels;
 
@@ -11,6 +10,7 @@ const BUILD_BUTTONS = [
   { type: TowerType.SNIPER, key: 'S', label: 'Sniper', desc: 'Shoots zombies in range. Needs ammo + survivors.' },
   { type: TowerType.BARRICADE, key: 'B', label: 'Barricade', desc: 'Blocks zombies. Soaks hits with boards.' },
   { type: TowerType.WORKSHOP, key: 'W', label: 'Workshop', desc: 'Scavenge a building for resources.' },
+  { type: DEMOLISH, key: 'X', label: 'Demolish', desc: 'Set charges on a bridge to drop it.' },
 ];
 
 export class Hud {
@@ -143,9 +143,10 @@ export class Hud {
     // colony stats: inline on wide layouts, otherwise folded into the wave line
     this.scavPct = this.game.totals.totalSalvage
       ? Math.floor(100 * this.game.totals.scavenged / this.game.totals.totalSalvage) : 0;
-    if (!this.compact && x + 220 < W - rightReserve) {
+    if (!this.compact && x + 300 < W - rightReserve) {
+      const intact = this.game.intactBridges().length, total = this.game.map.bridges.length;
       ctx.fillStyle = '#9fb0c4'; ctx.font = '12px monospace';
-      ctx.fillText(`Depots: ${this.game.depots().length}   Scavenged: ${this.scavPct}%   Zombies: ${this.game.totals.zombies}`, x + 10, 19);
+      ctx.fillText(`Depots: ${this.game.depots().length}   Bridges: ${intact}/${total}   Zombies: ${this.game.totals.zombies} (+${this.game.map.totalHidden} hidden)`, x + 10, 19);
     }
   }
 
@@ -167,8 +168,8 @@ export class Hud {
       ctx.font = 'bold 12px monospace';
       ctx.fillText(this.compact ? b.label : `${b.label} [${b.key}]`, x + bw / 2, y + 7);
       ctx.fillStyle = '#9fb0c4'; ctx.font = '10px monospace';
-      const bc = buildBoardCost(b.type), sc = Math.max(1, buildSurvivorCost(b.type));
-      ctx.fillText(`B${bc} S${sc}`, x + bw / 2, y + 24);
+      const cost = this.game.costFor(b.type);
+      ctx.fillText(`B${cost.boards} S${cost.survivors}`, x + bw / 2, y + 24);
       this.buttonRects.push({ x, y, w: bw, h: bh, action: () => this.setBuild(b.type) });
       x += bw + gap;
     }
@@ -262,6 +263,13 @@ export class Hud {
       ctx.fillStyle = { [TowerType.HQ]: '#5aa0ff', [TowerType.DEPOT]: '#3b78c0', [TowerType.SNIPER]: '#3fd06a', [TowerType.BARRICADE]: '#caa050', [TowerType.WORKSHOP]: '#ff9a3a' }[t.type];
       ctx.fillRect(mx + t.pos.x * scale - 1, my + t.pos.y * scale - 1, 3, 3);
     }
+    // bridges (objective markers — always shown)
+    for (const br of map.bridges) {
+      if (br.destroyed) continue;
+      ctx.fillStyle = br.charging > 0 ? '#ff4040' : '#ff9a3a';
+      const m = Math.max(2, scale + 1);
+      ctx.fillRect(mx + br.spawn.x * scale - 1, my + br.spawn.y * scale - 1, m, m);
+    }
     // zombies (only where visible)
     ctx.fillStyle = '#ff5a5a';
     for (const z of this.game.zombies) {
@@ -278,18 +286,19 @@ export class Hud {
 
   drawWave(ctx, W) {
     const g = this.game;
+    const intact = g.intactBridges().length, total = g.map.bridges.length;
     ctx.textBaseline = 'top'; ctx.font = 'bold 13px monospace';
     let txt;
     if (g.sandbox) txt = `Sandbox · Wave ${g.hordeCount}`;
-    else if (g.hordeCount >= g.maxWaves) txt = `Final stretch — clear the city!`;
-    else txt = `Wave ${g.hordeCount}/${g.maxWaves} · next ${Math.ceil(g.waveTimer / Option.fps)}s`;
+    else if (intact === 0) txt = `All bridges down — clear the city! (${g.totals.zombies + g.map.totalHidden} left)`;
+    else txt = `Demolish the bridges: ${intact}/${total} left · next horde ${Math.ceil(g.waveTimer / Option.fps)}s`;
     ctx.fillStyle = '#ffd24a';
     if (this.compact) {
       // left-aligned, with colony stats folded in (no room for the wide bar)
       ctx.textAlign = 'left';
       ctx.fillText(txt, 12, 42);
       ctx.fillStyle = '#9fb0c4'; ctx.font = '11px monospace';
-      ctx.fillText(`Depots ${g.depots().length} · Scav ${this.scavPct}% · Zeds ${g.totals.zombies}`, 12, 58);
+      ctx.fillText(`Depots ${g.depots().length} · Zeds ${g.totals.zombies} (+${g.map.totalHidden})`, 12, 58);
     } else {
       ctx.textAlign = 'center';
       ctx.fillText(txt, W / 2, 44);

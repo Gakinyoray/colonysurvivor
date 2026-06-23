@@ -92,6 +92,29 @@ export class Renderer {
       }
     }
 
+    // --- bridges (zombie entry points; objective markers) ---
+    for (const br of game.map.bridges) {
+      if (br.destroyed) continue;
+      const s = this.cellToScreen(br.spawn.x, br.spawn.y);
+      const cxp = s.x + CP / 2, cyp = s.y + CP / 2;
+      const charging = br.charging > 0;
+      const pulse = charging ? (Math.floor(performance.now() / 150) % 2 === 0) : false;
+      ctx.strokeStyle = charging ? (pulse ? '#ff5050' : '#ffae3a') : '#ff8a3a';
+      ctx.lineWidth = 2;
+      for (const p of br.cells) {
+        const cs = this.cellToScreen(p.x, p.y);
+        ctx.strokeRect(cs.x + 3.5, cs.y + 3.5, CP - 7, CP - 7);
+      }
+      // marker glyph
+      ctx.fillStyle = charging ? '#ff5050' : '#ffce6a';
+      ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(charging ? '✸' : '⚑', cxp, cyp);
+      if (charging) {
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace';
+        ctx.fillText(String(Math.ceil(br.charging / Option.fps)), cxp, cyp + 14);
+      }
+    }
+
     // --- supply links ---
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(90,170,255,0.55)';
@@ -244,6 +267,15 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(s.x + CP / 2, s.y + CP / 2, (10 - e.t) + 3, 0, Math.PI * 2);
       ctx.fill();
+    } else if (e.type === 'explosion') {
+      const s = this.cellToScreen(e.x, e.y);
+      const r = (18 - e.t) * 3 + 4;
+      ctx.fillStyle = `rgba(255,${120 + e.t * 6},40,${e.t / 18})`;
+      ctx.beginPath();
+      ctx.arc(s.x + CP / 2, s.y + CP / 2, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,220,120,${e.t / 18})`;
+      ctx.lineWidth = 2; ctx.stroke();
     }
   }
 

@@ -53,8 +53,21 @@ export class Building {
     this.totalSalvage = 0;
     this.harvested = 0;
     this.cleared = false;
+    this.hiddenZombies = 0;  // zombies lurking inside; must be flushed out to win
   }
   rect() { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
+}
+
+// A bridge spanning the water ring: the only place zombies enter the city.
+// Destroying every bridge (and clearing the map) is the win condition.
+export class Bridge {
+  constructor(cells, side) {
+    this.cells = cells;        // Point[] from the outer edge inward
+    this.side = side;          // 'N' | 'S' | 'E' | 'W'
+    this.spawn = cells[0];     // outermost cell where a horde appears
+    this.destroyed = false;
+    this.charging = 0;         // frames left on a demolition fuse (0 = none)
+  }
 }
 
 export class GameMap {
@@ -162,13 +175,20 @@ export function generateCity(map, difficulty) {
         c.salvage = b.totalSalvage;
         b.cells.push(c);
       }
+      // some buildings harbour zombies that must be flushed out to win
+      const lurkChance = 26 + difficulty * 6;
+      if (rand(100) < lurkChance) {
+        b.hiddenZombies = 1 + rand(2 + difficulty);
+      }
       map.buildings.push(b);
     }
   }
 
-  // 3) place a river + bridges along one edge to act as horde spawn lanes
-  placeRiverAndBridges(map, difficulty);
+  // 3) ring the city with water and place fixed bridges on all four sides —
+  // the only entry points for zombies. Destroying them all is part of winning.
+  placeWaterRingAndBridges(map, difficulty);
 
+  map.totalHidden = map.buildings.reduce((a, b) => a + b.hiddenZombies, 0);
   return map;
 }
 
@@ -188,46 +208,63 @@ function edgeCount(map, b) {
   return n;
 }
 
-function placeRiverAndBridges(map, difficulty) {
+function placeWaterRingAndBridges(map, difficulty) {
   const W = map.width, H = map.height;
-  const nBridges = Option.bridgeCount[Math.min(difficulty, Option.bridgeCount.length - 1)] || 1;
-  // river along the top two rows
-  const riverRows = 2;
-  for (let y = 0; y < riverRows; y++) {
-    for (let x = 0; x < W; x++) {
-      const c = map.get(x, y);
-      c.background = Background.WATER;
-      c.blocked = true;
+  const ring = 2;
+  const setWater = (x, y) => {
+    const c = map.get(x, y);
+    if (!c) return;
+    c.background = Background.WATER;
+    c.blocked = true;
+    c.building = null;
+    c.salvage = 0;
+  };
+  // 1) water moat on all four sides
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (x < ring || y < ring || x >= W - ring || y >= H - ring) setWater(x, y);
+
+  // 2) collect road lanes that reach each edge of the interior
+  const cols = [], rows = [];
+  for (let x = ring; x < W - ring; x++) if (map.get(x, ring).isRoad()) cols.push(x);
+  for (let y = ring; y < H - ring; y++) if (map.get(ring, y).isRoad()) rows.push(y);
+
+  const perSide = Math.max(W, H) <= 48 ? 1 : 2;
+  const pick = (lanes) => {
+    const out = [];
+    for (let i = 0; i < perSide && lanes.length; i++) {
+      out.push(lanes[Math.min(lanes.length - 1, Math.floor(((i + 0.5) / perSide) * lanes.length))]);
+    }
+    return out;
+  };
+
+  const carve = (cells, side) => {
+    for (const p of cells) {
+      const c = map.get(p.x, p.y);
+      c.background = Background.BRIDGE;
+      c.blocked = false;
       c.building = null;
       c.salvage = 0;
     }
+    map.bridges.push(new Bridge(cells, side));
+  };
+
+  // North / South bridges span the vertical moat at road columns
+  for (const col of pick(cols)) {
+    carve(Array.from({ length: ring }, (_, i) => new Point(col, i)), 'N');
+    carve(Array.from({ length: ring }, (_, i) => new Point(col, H - 1 - i)), 'S');
   }
-  // bridges: pick columns aligned to road lanes
-  const roadCols = [];
-  for (let x = 0; x < W; x++) if (map.get(x, riverRows).isRoad()) roadCols.push(x);
-  const chosen = [];
-  for (let i = 0; i < nBridges && roadCols.length; i++) {
-    const idx = Math.floor(((i + 0.5) / nBridges) * roadCols.length);
-    const col = roadCols[Math.min(idx, roadCols.length - 1)];
-    chosen.push(col);
-  }
-  for (const col of chosen) {
-    for (let y = 0; y < riverRows; y++) {
-      const c = map.get(col, y);
-      c.background = Background.BRIDGE;
-      c.blocked = false;
-    }
-    map.bridges.push(new Point(col, 0));
+  // West / East bridges span the horizontal moat at road rows
+  for (const row of pick(rows)) {
+    carve(Array.from({ length: ring }, (_, i) => new Point(i, row)), 'W');
+    carve(Array.from({ length: ring }, (_, i) => new Point(W - 1 - i, row)), 'E');
   }
   if (map.bridges.length === 0) {
-    // guarantee at least one entry lane on the left edge
-    const c = map.get(0, Math.floor(H / 2));
-    c.background = Background.BRIDGE; c.blocked = false;
-    map.bridges.push(new Point(0, Math.floor(H / 2)));
+    carve([new Point(0, Math.floor(H / 2)), new Point(1, Math.floor(H / 2))], 'W');
   }
 }
 
-// Find a good HQ start: a road cell near the centre, far from the river.
+// Find a good HQ start: a road cell near the centre, far from the water.
 export function findStart(map) {
   const cx = Math.floor(map.width / 2);
   const cy = Math.floor(map.height * 0.65);
