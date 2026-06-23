@@ -79,10 +79,18 @@ function wireAudio(g) {
   g.on('lose', () => onGameEnd());
 }
 
+function wireHudControls(h) {
+  h.onTogglePause = () => { paused = !paused; };
+  h.onToggleFast = () => { fast = !fast; };
+  h.onRestart = () => newGame({ difficulty: game.difficulty, sandbox: game.sandbox });
+  h.onMenu = () => backToMenu();
+}
+
 function newGame(opts) {
   audio.ensure();
   game = new Game(opts);
   hud = new Hud(game, renderer);
+  wireHudControls(hud);
   wireAudio(game);
   renderer.centerOn(game.hq.pos.x * Option.cellPixels, game.hq.pos.y * Option.cellPixels);
   renderer.clampCamera(game.map);
@@ -162,6 +170,48 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
+// --- touch input (mobile): tap = click, drag = pan camera ------------------
+let touch = null;
+canvas.addEventListener('touchstart', (e) => {
+  if (!hud) return;
+  e.preventDefault();
+  audio.ensure();
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  touch = {
+    startX: t.clientX, startY: t.clientY, lastX: t.clientX, lastY: t.clientY,
+    sx: t.clientX - r.left, sy: t.clientY - r.top, moved: false,
+  };
+  hud.onMove(touch.sx, touch.sy);
+}, { passive: false });
+canvas.addEventListener('touchmove', (e) => {
+  if (!hud || !touch || e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  const dx = t.clientX - touch.lastX, dy = t.clientY - touch.lastY;
+  touch.lastX = t.clientX; touch.lastY = t.clientY;
+  touch.sx = t.clientX - r.left; touch.sy = t.clientY - r.top;
+  if (Math.abs(t.clientX - touch.startX) > 8 || Math.abs(t.clientY - touch.startY) > 8) touch.moved = true;
+  if (touch.moved && game) {
+    renderer.cam.x -= dx; renderer.cam.y -= dy;
+    renderer.clampCamera(game.map);
+  }
+  if (hud.buildType != null) hud.onMove(touch.sx, touch.sy);
+}, { passive: false });
+canvas.addEventListener('touchend', (e) => {
+  if (!hud || !touch) return;
+  e.preventDefault();
+  if (!touch.moved) {
+    // a tap: keep build mode active after placing so several can be dropped
+    hud.shiftHeld = hud.buildType != null;
+    hud.onMove(touch.sx, touch.sy);
+    hud.onClick(touch.sx, touch.sy, 0);
+  }
+  touch = null;
+}, { passive: false });
+
 function handleScroll() {
   const sp = 14;
   if (keys.has('w') && hud?.buildType == null) {} // W is build; don't scroll with it
@@ -204,6 +254,7 @@ function frame(now) {
       // autosave occasionally
       if (game.frame % (Option.fps * 30) === 0) Net.saveGame(game.serialize());
     }
+    hud.paused = paused; hud.fast = fast;
     renderer.render(game, hud);
     hud.draw(renderer.ctx);
     if (paused) drawPaused();

@@ -28,6 +28,34 @@ Then open <http://localhost:8080> in a browser. (Any static file server works
 too, e.g. `python3 -m http.server`, but then the `/api/*` calls fall back to
 `localStorage`.)
 
+### Play on a phone / deploy to Vercel
+
+The game is plain static files, so it deploys to **Vercel** as a static site
+(no build step) — handy for checking it on a phone:
+
+```bash
+npm i -g vercel   # if needed
+vercel            # from the repo root; accept the defaults
+```
+
+`vercel.json` is already set up for a no-build static deploy. On Vercel the
+`/api/*` endpoints aren't served, so map-sharing/leaderboard transparently fall
+back to the browser's `localStorage` (the full mock API runs only with
+`npm start` locally). The game itself is 100% playable from the static deploy.
+
+> Note: **v0** is for generating UI from prompts, not for hosting an existing
+> app — use Vercel (or any static host / GitHub Pages) to put this online.
+
+**Touch controls** (auto-enabled on phones/tablets):
+
+- **Tap** a build button, then **tap the map** to place (keeps build mode active
+  so you can drop several; tap the button again to exit).
+- **Tap** a structure to select it; **tap the minimap** to recenter.
+- **Drag** anywhere to pan the camera.
+- On-screen **II / ▶** (pause) and **»** (fast-forward) buttons sit top-right;
+  the end screen has **Play again / Menu** buttons.
+- Landscape orientation is recommended for the most screen space.
+
 ## How to play
 
 You command the last survivors after a zombie outbreak. Your **Headquarters**
